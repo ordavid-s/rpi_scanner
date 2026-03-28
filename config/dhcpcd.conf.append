@@ -1,0 +1,4 @@
+# Append this to /etc/dhcpcd.conf if you prefer manual setup instead of setup_pi.sh
+interface wlan0
+static ip_address=192.168.50.1/24
+nohook wpa_supplicant

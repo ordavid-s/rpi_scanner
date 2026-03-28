@@ -1,0 +1,130 @@
+:root {
+  --bg: #0f172a;
+  --card: #111827;
+  --card-2: #1f2937;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --accent: #2563eb;
+  --border: #374151;
+  --danger: #b91c1c;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.login-body {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(17,24,39,0.95);
+  position: sticky;
+  top: 0;
+}
+
+h1, h2 { margin: 0 0 0.5rem 0; }
+.muted { color: var(--muted); }
+.error {
+  background: rgba(185,28,28,0.15);
+  color: #fecaca;
+  border: 1px solid rgba(185,28,28,0.5);
+  padding: 0.75rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.full-width { grid-column: 1 / -1; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 1rem;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+}
+
+.login-card {
+  width: min(420px, 92vw);
+}
+
+input, button, .button {
+  width: 100%;
+  padding: 0.8rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font: inherit;
+}
+
+input {
+  margin: 0.5rem 0 1rem 0;
+  background: var(--card-2);
+  color: var(--text);
+}
+
+button, .button {
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  display: inline-block;
+}
+
+button.secondary, .button.secondary {
+  background: transparent;
+}
+
+.button-row, .actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.actions form { margin: 0; }
+.actions > * { width: auto; }
+
+.kv {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(55,65,81,0.4);
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.7rem;
+  border-bottom: 1px solid rgba(55,65,81,0.4);
+  white-space: nowrap;
+}
+
+th { color: var(--muted); font-weight: 600; }

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BT GPS Panel</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    async function postAction(url) {
+      const res = await fetch(url, {method: 'POST'});
+      if (res.ok) location.reload();
+      else alert('Action failed');
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>BT GPS Panel</h1>
+      <div class="muted">{{ system.ip_addr }} · HTTPS admin panel</div>
+    </div>
+    <div class="actions">
+      <a class="button secondary" href="/export/bluetooth.csv">Export CSV</a>
+      <form method="post" action="/logout">
+        <button class="secondary" type="submit">Logout</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Scanner</h2>
+      <div class="kv"><span>Status</span><strong>{{ state.scanner_status }}</strong></div>
+      <div class="kv"><span>Last run</span><strong>{{ state.bluetooth_last_run or '-' }}</strong></div>
+      <div class="kv"><span>Error</span><strong>{{ state.scanner_error or '-' }}</strong></div>
+      <div class="button-row">
+        <button onclick="postAction('/api/scan/start')">Start scan</button>
+        <button class="secondary" onclick="postAction('/api/scan/stop')">Stop scan</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>GPS</h2>
+      <div class="kv"><span>Status</span><strong>{{ state.gps_status }}</strong></div>
+      <div class="kv"><span>Fix time</span><strong>{{ state.latest_gps.time or '-' }}</strong></div>
+      <div class="kv"><span>Mode</span><strong>{{ state.latest_gps.mode or '-' }}</strong></div>
+      <div class="kv"><span>Lat</span><strong>{{ state.latest_gps.lat or '-' }}</strong></div>
+      <div class="kv"><span>Lon</span><strong>{{ state.latest_gps.lon or '-' }}</strong></div>
+      <div class="kv"><span>Alt</span><strong>{{ state.latest_gps.alt or '-' }}</strong></div>
+      <div class="kv"><span>Error</span><strong>{{ state.gps_error or '-' }}</strong></div>
+    </section>
+
+    <section class="card">
+      <h2>System</h2>
+      <div class="kv"><span>Temp</span><strong>{{ system.temp_c or '-' }} °C</strong></div>
+      <div class="kv"><span>Disk free</span><strong>{{ system.disk_free_gb }} / {{ system.disk_total_gb }} GB</strong></div>
+      <div class="kv"><span>Uptime</span><strong>{{ system.uptime_seconds or '-' }} s</strong></div>
+      <div class="kv"><span>IP</span><strong>{{ system.ip_addr or '-' }}</strong></div>
+    </section>
+
+    <section class="card full-width">
+      <h2>Recent Bluetooth observations</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Address</th>
+              <th>Name</th>
+              <th>RSSI</th>
+              <th>Lat</th>
+              <th>Lon</th>
+              <th>Connected</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <td>{{ row['ts'] }}</td>
+              <td>{{ row['address'] }}</td>
+              <td>{{ row['name'] or row['alias'] or '-' }}</td>
+              <td>{{ row['rssi'] if row['rssi'] is not none else '-' }}</td>
+              <td>{{ row['lat'] if row['lat'] is not none else '-' }}</td>
+              <td>{{ row['lon'] if row['lon'] is not none else '-' }}</td>
+              <td>{{ row['connected'] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card full-width">
+      <h2>Event log</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Time</th><th>Level</th><th>Message</th></tr>
+          </thead>
+          <tbody>
+            {% for row in events %}
+            <tr>
+              <td>{{ row['ts'] }}</td>
+              <td>{{ row['level'] }}</td>
+              <td>{{ row['message'] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

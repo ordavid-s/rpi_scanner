@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BT GPS Panel - Login</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+  <div class="card login-card">
+    <h1>BT GPS Panel</h1>
+    <p class="muted">Local admin panel</p>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="post" action="/login">
+      <label for="password">Admin password</label>
+      <input id="password" name="password" type="password" required autofocus>
+      <button type="submit">Log in</button>
+    </form>
+  </div>
+</body>
+</html>
