@@ -13,7 +13,11 @@ from .gps_reader import GPSReader
 from .state import AppState
 
 
-DEVICE_RE = re.compile(r"^Device\s+([0-9A-F:]{17})\s*(.*)$", re.IGNORECASE)
+DEVICE_RE = re.compile(
+    r"^Device\s+(?P<addr>[0-9A-F:]{17})\s*(?P<name>.*)$",
+    re.IGNORECASE,
+)
+
 YESNO_RE = re.compile(r"^(yes|no)$", re.IGNORECASE)
 
 
