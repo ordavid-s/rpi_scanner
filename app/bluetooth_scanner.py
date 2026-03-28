@@ -6,6 +6,7 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
+import time
 
 from .db import Database
 from .gps_reader import GPSReader
@@ -17,21 +18,27 @@ YESNO_RE = re.compile(r"^(yes|no)$", re.IGNORECASE)
 
 
 class BluetoothScanner:
-    def __init__(
-        self,
-        db: Database,
-        state: AppState,
-        gps: GPSReader,
-        scan_seconds: int = 8,
-        loop_sleep: int = 5,
-    ):
+    def __init__(self, db, state, gps_reader, scan_seconds=10, loop_sleep=5, adapter="hci0"):
         self.db = db
         self.state = state
-        self.gps = gps
+        self.gps_reader = gps_reader
         self.scan_seconds = scan_seconds
         self.loop_sleep = loop_sleep
+        self.adapter = adapter
         self.enabled = False
 
+    def _btctl(self, command_text: str, timeout: int = 20, check: bool = True) -> str:
+        """
+        Run bluetoothctl while explicitly selecting the configured adapter.
+        """
+        full_input = f"select {self.adapter}\n{command_text}\nquit\n"
+        return self._run_cmd(
+            ["bluetoothctl"],
+            timeout=timeout,
+            check=check,
+            input_text=full_input,
+        )
+    
     def start(self) -> None:
         self.enabled = True
         self.db.log_event("INFO", "Bluetooth scan requested: start")
@@ -40,7 +47,7 @@ class BluetoothScanner:
         self.enabled = False
         self.state.set_scanner("idle")
         self.db.log_event("INFO", "Bluetooth scan requested: stop")
-        self._run_cmd(["bluetoothctl", "scan", "off"], timeout=5, check=False)
+        self._btctl("scan off", timeout=10, check=False)
 
     async def run_forever(self) -> None:
         while True:
@@ -56,26 +63,37 @@ class BluetoothScanner:
                 self.db.log_event("ERROR", f"Bluetooth scan failed: {exc}")
                 await asyncio.sleep(3)
 
-    def scan_once(self) -> None:
-        self._run_cmd(["bluetoothctl", "power", "on"], timeout=5)
-        self._run_cmd(["bluetoothctl", "scan", "le"], timeout=5, check=False)
-        self._run_cmd(["bluetoothctl", "--timeout", str(self.scan_seconds), "scan", "on"], timeout=self.scan_seconds + 5, check=False)
-        devices_output = self._run_cmd(["bluetoothctl", "devices"], timeout=10)
-        for line in devices_output.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            m = DEVICE_RE.match(line)
+    def validate_adapter(self):
+        out = self._btctl("list", timeout=10, check=False)
+        if self.adapter not in out:
+            raise RuntimeError(f"Bluetooth adapter {self.adapter} not found. bluetoothctl list output:\n{out}")
+    
+    def scan_once(self):
+        self._btctl("power on", timeout=10)
+        self._btctl("menu scan\ntransport le\nback", timeout=10, check=False)
+        self._btctl("scan on", timeout=10, check=False)
+    
+        time.sleep(self.scan_seconds)
+    
+        self._btctl("scan off", timeout=10, check=False)
+        devices_out = self._btctl("devices", timeout=10)
+    
+        gps = self.gps_reader.latest_fix
+    
+        for line in devices_out.splitlines():
+            m = DEVICE_RE.match(line.strip())
             if not m:
                 continue
-            address = m.group(1)
-            fallback_name = m.group(2).strip() or None
-            obs = self._read_device_info(address, fallback_name)
-            self.db.insert_bt_observation(obs, gps=self.gps.latest_fix)
+    
+            address = m.group("addr")
+            fallback_name = (m.group("name") or "").strip()
+            obs = self._read_device_info(address, fallback_name=fallback_name)
+            self.db.insert_bt_observation(obs, gps=gps)
+    
         self.state.bluetooth_last_run = datetime.now(timezone.utc).isoformat()
 
     def _read_device_info(self, address: str, fallback_name: Optional[str]) -> Dict:
-        text = self._run_cmd(["bluetoothctl", "info", address], timeout=8, check=False)
+        text = self._btctl(f"info {address}", timeout=10, check=False)
         data: Dict[str, object] = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "address": address,
@@ -105,18 +123,23 @@ class BluetoothScanner:
                 data.setdefault("uuids", []).append(value)
         return data
 
-    def _run_cmd(self, cmd: List[str], timeout: int = 10, check: bool = True) -> str:
+    def _run_cmd(self, cmd, timeout=20, check=True, input_text=None):
         env = os.environ.copy()
-        env.setdefault("LC_ALL", "C")
+        env["LC_ALL"] = "C"
+    
         proc = subprocess.run(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            input=input_text,
             text=True,
+            capture_output=True,
             timeout=timeout,
             env=env,
-            check=False,
         )
+    
         if check and proc.returncode != 0:
-            raise RuntimeError(f"Command failed ({proc.returncode}): {' '.join(cmd)}\n{proc.stdout}")
+            raise RuntimeError(
+                f"Command failed: {' '.join(cmd)}\n"
+                f"stdout:\n{proc.stdout}\n\nstderr:\n{proc.stderr}"
+            )
+    
         return proc.stdout
