@@ -33,6 +33,7 @@ GPSD_PORT = int(os.getenv("GPSD_PORT", "2947"))
 SCAN_SECONDS = int(os.getenv("SCAN_SECONDS", "8"))
 SCAN_LOOP_SLEEP = int(os.getenv("SCAN_LOOP_SLEEP", "5"))
 MAX_ROWS_DASHBOARD = int(os.getenv("MAX_ROWS_DASHBOARD", "100"))
+BT_ADAPTER = os.getenv("BT_ADAPTER", "hci0")
 
 state = AppState()
 db = Database(DB_PATH)
@@ -40,9 +41,10 @@ gps = GPSReader(db=db, state=state, host=GPSD_HOST, port=GPSD_PORT)
 scanner = BluetoothScanner(
     db=db,
     state=state,
-    gps=gps,
+    gps_reader=gps,
     scan_seconds=SCAN_SECONDS,
     loop_sleep=SCAN_LOOP_SLEEP,
+    adapter=BT_ADAPTER,
 )
 
 gps_task: Optional[asyncio.Task] = None
