@@ -54,10 +54,6 @@ systemctl daemon-reload
 
 bash "$INSTALL_DIR/scripts/gen_cert.sh" "$INSTALL_DIR/certs"
 
-systemctl restart dhcpcd || true
-ifdown eth0 2>/dev/null || true
-ifup eth0
-
 systemctl enable gpsd
 systemctl restart gpsd || true
 systemctl enable bt-gps-panel.service
