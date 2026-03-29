@@ -27,16 +27,17 @@ python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --upgrade pip
 "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
 
-# Static IP for Ethernet via dhcpcd
-if ! grep -q 'bt-gps-panel-eth begin' /etc/dhcpcd.conf; then
-  cat >> /etc/dhcpcd.conf <<DHCPCD
+ETH_CONN_NAME="${ETH_CONN_NAME:-Wired connection 1}"
 
-# bt-gps-panel-eth begin
-interface ${ETH_IFACE}
-static ip_address=${ETH_IP}
-# bt-gps-panel-eth end
-DHCPCD
-fi
+nmcli connection modify "$ETH_CONN_NAME" \
+  ipv4.method manual \
+  ipv4.addresses 192.168.7.1/24 \
+  ipv4.gateway "" \
+  ipv4.dns "" \
+  ipv6.method ignore \
+  connection.autoconnect yes
+
+nmcli connection up "$ETH_CONN_NAME" || true
 
 # gpsd defaults
 GPS_DEVICE="${GPS_DEVICE:-$GPS_DEVICE_DEFAULT}"
