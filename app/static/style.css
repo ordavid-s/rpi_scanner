@@ -1,15 +1,18 @@
 :root {
-  --bg: #0f172a;
-  --card: #111827;
-  --card-2: #1f2937;
+  --bg: #0b1220;
+  --panel: #111827;
+  --panel-2: #172033;
+  --border: #263246;
   --text: #e5e7eb;
-  --muted: #9ca3af;
+  --muted: #94a3b8;
   --accent: #2563eb;
-  --border: #374151;
-  --danger: #b91c1c;
+  --good: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
 }
 
 * { box-sizing: border-box; }
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -24,60 +27,95 @@ body {
 }
 
 .topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  background: rgba(17,24,39,0.95);
   position: sticky;
   top: 0;
+  z-index: 10;
+  background: rgba(11, 18, 32, 0.95);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 18px;
 }
 
-h1, h2 { margin: 0 0 0.5rem 0; }
-.muted { color: var(--muted); }
-.error {
-  background: rgba(185,28,28,0.15);
-  color: #fecaca;
-  border: 1px solid rgba(185,28,28,0.5);
-  padding: 0.75rem;
-  border-radius: 12px;
-  margin-bottom: 1rem;
+.simple-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
-.grid {
+.top-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.dashboard-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
-  padding: 1rem;
+  gap: 16px;
 }
 
-.full-width { grid-column: 1 / -1; }
+.simple-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
 
 .card {
-  background: var(--card);
+  background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 1rem;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+  border-radius: 16px;
+  padding: 16px;
 }
 
 .login-card {
   width: min(420px, 92vw);
 }
 
+.stat-card .label {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.big-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.small {
+  font-size: 13px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  background: rgba(220, 38, 38, 0.14);
+  color: #fecaca;
+  border: 1px solid rgba(220, 38, 38, 0.45);
+  padding: 10px 12px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+
 input, button, .button {
-  width: 100%;
-  padding: 0.8rem 0.95rem;
   border-radius: 12px;
   border: 1px solid var(--border);
+  padding: 10px 14px;
   font: inherit;
 }
 
 input {
-  margin: 0.5rem 0 1rem 0;
-  background: var(--card-2);
+  width: 100%;
+  margin: 8px 0 14px 0;
+  background: var(--panel-2);
   color: var(--text);
 }
 
@@ -86,7 +124,6 @@ button, .button {
   color: white;
   cursor: pointer;
   text-decoration: none;
-  text-align: center;
   display: inline-block;
 }
 
@@ -94,21 +131,12 @@ button.secondary, .button.secondary {
   background: transparent;
 }
 
-.button-row, .actions {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.actions form { margin: 0; }
-.actions > * { width: auto; }
-
-.kv {
+.section-head {
   display: flex;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid rgba(55,65,81,0.4);
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
 .table-wrap {
@@ -122,9 +150,40 @@ table {
 
 th, td {
   text-align: left;
-  padding: 0.7rem;
-  border-bottom: 1px solid rgba(55,65,81,0.4);
+  padding: 10px 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
   white-space: nowrap;
 }
 
-th { color: var(--muted); font-weight: 600; }
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-row {
+  display: grid;
+  grid-template-columns: 180px 90px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.event-time, .event-level {
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .event-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .big-value {
+    font-size: 20px;
+  }
+}
