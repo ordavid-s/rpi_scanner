@@ -5,61 +5,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BT GPS Panel</title>
   <link rel="stylesheet" href="/static/style.css">
-  <script>
-    async function postAction(url) {
-      const res = await fetch(url, {method: 'POST'});
-      if (res.ok) location.reload();
-      else alert('Action failed');
-    }
-  </script>
 </head>
 <body>
-  <header class="topbar">
+  <header class="topbar simple-topbar">
     <div>
       <h1>BT GPS Panel</h1>
-      <div class="muted">{{ system.ip_addr }} · HTTPS admin panel</div>
+      <div class="muted">Live dashboard</div>
     </div>
-    <div class="actions">
+    <div class="top-actions">
+      <button id="startScanBtn" type="button">Start scan</button>
+      <button id="stopScanBtn" type="button" class="secondary" style="color:white;">Stop scan</button>
       <a class="button secondary" href="/export/bluetooth.csv">Export CSV</a>
       <form method="post" action="/logout">
-        <button class="secondary" type="submit">Logout</button>
+        <button type="submit" class="secondary" style="color:white;">Log out</button>
       </form>
     </div>
   </header>
 
-  <main class="grid">
-    <section class="card">
-      <h2>Scanner</h2>
-      <div class="kv"><span>Status</span><strong>{{ state.scanner_status }}</strong></div>
-      <div class="kv"><span>Last run</span><strong>{{ state.bluetooth_last_run or '-' }}</strong></div>
-      <div class="kv"><span>Error</span><strong>{{ state.scanner_error or '-' }}</strong></div>
-      <div class="button-row">
-        <button onclick="postAction('/api/scan/start')">Start scan</button>
-        <button class="secondary" onclick="postAction('/api/scan/stop')">Stop scan</button>
+  <main class="dashboard-shell">
+    <section class="simple-grid">
+      <div class="card stat-card">
+        <div class="label">GPS</div>
+        <div id="gpsStatus" class="big-value">—</div>
+        <div id="gpsError" class="muted small"></div>
+      </div>
+
+      <div class="card stat-card">
+        <div class="label">Coordinates</div>
+        <div id="gpsCoords" class="big-value">—</div>
+        <div id="gpsMeta" class="muted small"></div>
+      </div>
+
+      <div class="card stat-card">
+        <div class="label">Bluetooth scanner</div>
+        <div id="scannerStatus" class="big-value">—</div>
+        <div id="scannerError" class="muted small"></div>
+      </div>
+
+      <div class="card stat-card">
+        <div class="label">System</div>
+        <div id="systemIp" class="big-value">—</div>
+        <div id="systemMeta" class="muted small"></div>
       </div>
     </section>
 
     <section class="card">
-      <h2>GPS</h2>
-      <div class="kv"><span>Status</span><strong>{{ state.gps_status }}</strong></div>
-      <div class="kv"><span>Fix time</span><strong>{{ state.latest_gps.time or '-' }}</strong></div>
-      <div class="kv"><span>Mode</span><strong>{{ state.latest_gps.mode or '-' }}</strong></div>
-      <div class="kv"><span>Lat</span><strong>{{ state.latest_gps.lat or '-' }}</strong></div>
-      <div class="kv"><span>Lon</span><strong>{{ state.latest_gps.lon or '-' }}</strong></div>
-      <div class="kv"><span>Alt</span><strong>{{ state.latest_gps.alt or '-' }}</strong></div>
-      <div class="kv"><span>Error</span><strong>{{ state.gps_error or '-' }}</strong></div>
-    </section>
-
-    <section class="card">
-      <h2>System</h2>
-      <div class="kv"><span>Temp</span><strong>{{ system.temp_c or '-' }} °C</strong></div>
-      <div class="kv"><span>Disk free</span><strong>{{ system.disk_free_gb }} / {{ system.disk_total_gb }} GB</strong></div>
-      <div class="kv"><span>Uptime</span><strong>{{ system.uptime_seconds or '-' }} s</strong></div>
-      <div class="kv"><span>IP</span><strong>{{ system.ip_addr or '-' }}</strong></div>
-    </section>
-
-    <section class="card full-width">
-      <h2>Recent Bluetooth observations</h2>
+      <div class="section-head">
+        <h2>Recent Bluetooth devices</h2>
+        <span id="lastRefresh" class="muted small"></span>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -70,45 +64,151 @@
               <th>RSSI</th>
               <th>Lat</th>
               <th>Lon</th>
-              <th>Connected</th>
             </tr>
           </thead>
-          <tbody>
-            {% for row in rows %}
-            <tr>
-              <td>{{ row['ts'] }}</td>
-              <td>{{ row['address'] }}</td>
-              <td>{{ row['name'] or row['alias'] or '-' }}</td>
-              <td>{{ row['rssi'] if row['rssi'] is not none else '-' }}</td>
-              <td>{{ row['lat'] if row['lat'] is not none else '-' }}</td>
-              <td>{{ row['lon'] if row['lon'] is not none else '-' }}</td>
-              <td>{{ row['connected'] }}</td>
-            </tr>
-            {% endfor %}
+          <tbody id="recentTableBody">
+            <tr><td colspan="6" class="muted">Loading…</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <section class="card full-width">
-      <h2>Event log</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Time</th><th>Level</th><th>Message</th></tr>
-          </thead>
-          <tbody>
-            {% for row in events %}
-            <tr>
-              <td>{{ row['ts'] }}</td>
-              <td>{{ row['level'] }}</td>
-              <td>{{ row['message'] }}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <section class="card">
+      <div class="section-head">
+        <h2>Recent events</h2>
+      </div>
+      <div id="eventList" class="event-list">
+        <div class="muted">Loading…</div>
       </div>
     </section>
   </main>
+
+  <script>
+    async function postJSON(url) {
+      const res = await fetch(url, { method: "POST" });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      return res.json();
+    }
+
+    function fmt(v, digits = 6) {
+      if (v === null || v === undefined || v === "") return "—";
+      if (typeof v === "number") return v.toFixed(digits);
+      return String(v);
+    }
+
+    function shortTime(ts) {
+      if (!ts) return "—";
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return ts;
+      return d.toLocaleString();
+    }
+
+    function gpsBadge(status) {
+      if (status === "fix") return "GPS fix";
+      if (status === "retrying") return "Retrying";
+      if (status === "searching") return "Searching";
+      return status || "—";
+    }
+
+    async function refreshAll() {
+      const [statusRes, recentRes, eventsRes] = await Promise.all([
+        fetch("/api/status"),
+        fetch("/api/recent"),
+        fetch("/api/events"),
+      ]);
+
+      if (!statusRes.ok || !recentRes.ok || !eventsRes.ok) {
+        throw new Error("Failed loading dashboard data");
+      }
+
+      const statusData = await statusRes.json();
+      const recentData = await recentRes.json();
+      const eventsData = await eventsRes.json();
+
+      const app = statusData.app || {};
+      const system = statusData.system || {};
+      const gps = app.latest_gps || {};
+
+      document.getElementById("gpsStatus").textContent = gpsBadge(app.gps_status);
+      document.getElementById("gpsError").textContent = app.gps_error || "";
+      document.getElementById("gpsCoords").textContent =
+        (gps.lat != null && gps.lon != null)
+          ? `${fmt(gps.lat)}, ${fmt(gps.lon)}`
+          : "No coordinates yet";
+
+      document.getElementById("gpsMeta").textContent =
+        `Mode: ${gps.mode ?? "—"} · Sats: ${gps.sats ?? "—"} · Time: ${shortTime(gps.time)}`;
+
+      document.getElementById("scannerStatus").textContent = app.scanner_status || "—";
+      document.getElementById("scannerError").textContent = app.scanner_error || "";
+
+      document.getElementById("systemIp").textContent = system.ip_addr || "No IP";
+      document.getElementById("systemMeta").textContent =
+        `Temp: ${system.temp_c ?? "—"}°C · Free disk: ${system.disk_free_gb ?? "—"} GB`;
+
+      const tbody = document.getElementById("recentTableBody");
+      const items = recentData.items || [];
+      if (!items.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="muted">No Bluetooth data yet</td></tr>`;
+      } else {
+        tbody.innerHTML = items.map(item => `
+          <tr>
+            <td>${shortTime(item.ts)}</td>
+            <td>${item.address || "—"}</td>
+            <td>${item.name || item.alias || "—"}</td>
+            <td>${item.rssi ?? "—"}</td>
+            <td>${item.lat ?? "—"}</td>
+            <td>${item.lon ?? "—"}</td>
+          </tr>
+        `).join("");
+      }
+
+      const eventList = document.getElementById("eventList");
+      const evs = eventsData.items || [];
+      if (!evs.length) {
+        eventList.innerHTML = `<div class="muted">No events yet</div>`;
+      } else {
+        eventList.innerHTML = evs.map(ev => `
+          <div class="event-row">
+            <div class="event-time">${shortTime(ev.ts)}</div>
+            <div class="event-level">${ev.level}</div>
+            <div class="event-message">${ev.message}</div>
+          </div>
+        `).join("");
+      }
+
+      document.getElementById("lastRefresh").textContent =
+        `Updated ${new Date().toLocaleTimeString()}`;
+    }
+
+    async function safeRefresh() {
+      try {
+        await refreshAll();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    document.getElementById("startScanBtn").addEventListener("click", async () => {
+      try {
+        await postJSON("/api/scan/start");
+        await safeRefresh();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    document.getElementById("stopScanBtn").addEventListener("click", async () => {
+      try {
+        await postJSON("/api/scan/stop");
+        await safeRefresh();
+      } catch (err) {
+        console.error(err);
+      }
+    });
+
+    safeRefresh();
+    setInterval(safeRefresh, 3000);
+  </script>
 </body>
 </html>
