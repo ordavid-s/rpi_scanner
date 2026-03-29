@@ -9,9 +9,11 @@ from typing import Any, Dict, Optional
 class AppState:
     scanner_status: str = "idle"
     scanner_error: str = ""
-    gps_status: str = "no_fix"
+
+    gps_status: str = "searching"   # searching | fix | retrying
     gps_error: str = ""
     latest_gps: Dict[str, Any] = field(default_factory=dict)
+
     bluetooth_last_run: Optional[str] = None
     lock: Lock = field(default_factory=Lock)
 
@@ -31,7 +33,12 @@ class AppState:
             self.scanner_status = status
             self.scanner_error = error
 
-    def set_gps(self, status: str, gps: Optional[Dict[str, Any]] = None, error: str = "") -> None:
+    def set_gps(
+        self,
+        status: str,
+        gps: Optional[Dict[str, Any]] = None,
+        error: str = "",
+    ) -> None:
         with self.lock:
             self.gps_status = status
             self.gps_error = error
