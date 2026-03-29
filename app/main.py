@@ -3,13 +3,12 @@ from __future__ import annotations
 import asyncio
 import os
 import secrets
-import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -32,7 +31,7 @@ GPSD_HOST = os.getenv("GPSD_HOST", "127.0.0.1")
 GPSD_PORT = int(os.getenv("GPSD_PORT", "2947"))
 SCAN_SECONDS = int(os.getenv("SCAN_SECONDS", "8"))
 SCAN_LOOP_SLEEP = int(os.getenv("SCAN_LOOP_SLEEP", "5"))
-MAX_ROWS_DASHBOARD = int(os.getenv("MAX_ROWS_DASHBOARD", "100"))
+MAX_ROWS_DASHBOARD = int(os.getenv("MAX_ROWS_DASHBOARD", "50"))
 BT_ADAPTER = os.getenv("BT_ADAPTER", "hci0")
 
 state = AppState()
@@ -77,6 +76,11 @@ def healthz() -> dict:
     return {"ok": True}
 
 
+def require_auth(request: Request) -> None:
+    if not request.session.get("auth"):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 @app.get("/", response_class=HTMLResponse)
 def root(request: Request):
     if not request.session.get("auth"):
@@ -86,11 +90,7 @@ def root(request: Request):
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    return TEMPLATES.TemplateResponse(
-        request,
-        "login.html",
-        {"error": ""},
-    )
+    return TEMPLATES.TemplateResponse(request, "login.html", {"error": ""})
 
 
 @app.post("/login", response_class=HTMLResponse)
@@ -112,27 +112,9 @@ def logout(request: Request):
     return RedirectResponse(url="/login", status_code=status.HTTP_303_SEE_OTHER)
 
 
-def require_auth(request: Request) -> None:
-    if not request.session.get("auth"):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, _: None = Depends(require_auth)):
-    snapshot = state.snapshot()
-    system = get_system_status()
-    rows = db.get_recent_bt(MAX_ROWS_DASHBOARD)
-    events = db.get_recent_events(30)
-    return TEMPLATES.TemplateResponse(
-        request,
-        "dashboard.html",
-        {
-            "state": snapshot,
-            "system": system,
-            "rows": rows,
-            "events": events,
-        },
-    )
+    return TEMPLATES.TemplateResponse(request, "dashboard.html", {})
 
 
 @app.post("/api/scan/start")
@@ -157,10 +139,14 @@ def api_status(_: None = Depends(require_auth)):
 
 @app.get("/api/recent")
 def api_recent(_: None = Depends(require_auth)):
-    rows = db.get_recent_bt(50)
-    return {
-        "items": [dict(r) for r in rows]
-    }
+    rows = db.get_recent_bt(MAX_ROWS_DASHBOARD)
+    return {"items": [dict(r) for r in rows]}
+
+
+@app.get("/api/events")
+def api_events(_: None = Depends(require_auth)):
+    rows = db.get_recent_events(20)
+    return {"items": [dict(r) for r in rows]}
 
 
 @app.get("/export/bluetooth.csv")
