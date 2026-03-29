@@ -14,10 +14,22 @@ from .gps_reader import GPSReader
 from .state import AppState
 
 
-DEVICE_RE = re.compile(
-    r"Device\s+(?P<addr>[0-9A-F:]{17})\s*(?P<name>.*)$",
-    re.IGNORECASE,
+ANSI_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+CTRL_RE = re.compile(r"[\x00-\x08\x0B-\x1F\x7F]")
+
+
+def clean_bt_line(line: str) -> str:
+    line = ANSI_RE.sub("", line)
+    line = CTRL_RE.sub("", line)
+    return line.strip()
+
+
+RE_NEW = re.compile(r"^\[NEW\]\s+Device\s+([0-9A-Fa-f:]{17})(?:\s+(.*))?$")
+RE_CHG_RSSI = re.compile(
+    r"^\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+RSSI:\s+(?:(-?\d+)|\S+\s+\((-?\d+)\))\s*$"
 )
+RE_CHG_NAME = re.compile(r"^\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Name:\s+(.*)$")
+RE_CHG_ALIAS = re.compile(r"^\[CHG\]\s+Device\s+([0-9A-Fa-f:]{17})\s+Alias:\s+(.*)$")
 
 
 class BluetoothScanner:
@@ -26,8 +38,8 @@ class BluetoothScanner:
         db: Database,
         state: AppState,
         gps_reader: GPSReader,
-        scan_seconds: int = 10,   # kept for compatibility; not used in continuous mode
-        loop_sleep: int = 5,      # kept for compatibility; not used in continuous mode
+        scan_seconds: int = 10,
+        loop_sleep: int = 5,
         adapter: str = "",
         dedup_seconds: int = 30,
     ):
@@ -36,14 +48,16 @@ class BluetoothScanner:
         self.gps_reader = gps_reader
         self.scan_seconds = scan_seconds
         self.loop_sleep = loop_sleep
-        self.adapter = adapter
+        self.adapter = adapter.strip()
         self.dedup_seconds = dedup_seconds
 
         self.enabled = False
         self.proc: Optional[subprocess.Popen] = None
         self.reader_thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
+
         self.last_seen_logged: dict[str, float] = {}
+        self.devices: dict[str, dict] = {}
 
     def start(self) -> None:
         if self.enabled:
@@ -97,11 +111,13 @@ class BluetoothScanner:
         )
 
         try:
-            self._send("select " + self.adapter)
+            if self.adapter:
+                self._send(f"select {self.adapter}")
             self._send("power on")
             self._send("scan on")
 
-            self.db.log_event("INFO", f"Bluetooth continuous scan started on adapter {self.adapter}")
+            adapter_label = self.adapter or "(default)"
+            self.db.log_event("INFO", f"Bluetooth continuous scan started on adapter {adapter_label}")
 
             self.reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
             self.reader_thread.start()
@@ -120,7 +136,7 @@ class BluetoothScanner:
             if self.stop_event.is_set():
                 break
 
-            line = raw_line.strip()
+            line = clean_bt_line(raw_line)
             if not line:
                 continue
 
@@ -128,57 +144,118 @@ class BluetoothScanner:
 
         self.state.bluetooth_last_run = datetime.now(timezone.utc).isoformat()
 
+    def _update_device(
+        self,
+        address: str,
+        *,
+        name: Optional[str] = None,
+        alias: Optional[str] = None,
+        rssi: Optional[int] = None,
+    ) -> None:
+        d = self.devices.setdefault(
+            address,
+            {
+                "name": None,
+                "alias": None,
+                "rssi": None,
+            },
+        )
+        if name is not None:
+            d["name"] = name
+        if alias is not None:
+            d["alias"] = alias
+        if rssi is not None:
+            d["rssi"] = rssi
+
     def _handle_scan_line(self, line: str) -> None:
-        """
-        Handle live bluetoothctl output while scan is running.
-        Typical lines can contain '[NEW] Device AA:BB:... Name'
-        or '[CHG] Device ... RSSI: ...', etc.
-        """
-        m = DEVICE_RE.search(line)
-        if not m:
+        now_ts = time.time()
+
+        m = RE_NEW.match(line)
+        if m:
+            address = m.group(1).upper()
+            name = (m.group(2) or "").strip() or None
+            self._update_device(address, name=name)
+            self._maybe_log_observation(address, now_ts, fallback_name=name)
             return
 
-        address = m.group("addr")
-        fallback_name = (m.group("name") or "").strip()
+        m = RE_CHG_RSSI.match(line)
+        if m:
+            address = m.group(1).upper()
+            rssi_str = m.group(2) if m.group(2) is not None else m.group(3)
+            rssi = int(rssi_str)
+            self._update_device(address, rssi=rssi)
+            self._maybe_log_observation(address, now_ts, fallback_name=self.devices[address].get("name"))
+            return
 
-        now_ts = time.time()
+        m = RE_CHG_NAME.match(line)
+        if m:
+            address = m.group(1).upper()
+            name = m.group(2).strip() or None
+            self._update_device(address, name=name)
+            self._maybe_log_observation(address, now_ts, fallback_name=name)
+            return
+
+        m = RE_CHG_ALIAS.match(line)
+        if m:
+            address = m.group(1).upper()
+            alias = m.group(2).strip() or None
+            self._update_device(address, alias=alias)
+            self._maybe_log_observation(
+                address,
+                now_ts,
+                fallback_name=self.devices[address].get("name") or alias,
+            )
+            return
+
+    def _maybe_log_observation(self, address: str, now_ts: float, fallback_name: Optional[str]) -> None:
         last_ts = self.last_seen_logged.get(address, 0.0)
         if now_ts - last_ts < self.dedup_seconds:
             return
-
         self.last_seen_logged[address] = now_ts
 
+        cached = self.devices.get(address, {})
         try:
             obs = self._read_device_info(address, fallback_name=fallback_name)
         except Exception:
             obs = {
                 "ts": datetime.now(timezone.utc).isoformat(),
                 "address": address,
-                "name": fallback_name,
-                "alias": fallback_name,
+                "name": cached.get("name") or fallback_name,
+                "alias": cached.get("alias") or cached.get("name") or fallback_name,
                 "uuids": [],
             }
+            if cached.get("rssi") is not None:
+                obs["rssi"] = cached["rssi"]
 
         gps = self.gps_reader.latest_fix
         self.db.insert_bt_observation(obs, gps=gps)
 
     def _read_device_info(self, address: str, fallback_name: Optional[str]) -> Dict:
+        script = ""
+        if self.adapter:
+            script += f"select {self.adapter}\n"
+        script += f"info {address}\nquit\n"
+
         text = self._run_btctl_script(
-            f"select {self.adapter}\ninfo {address}\nquit\n",
+            script,
             timeout=10,
             check=False,
         )
 
+        cached = self.devices.get(address, {})
         data: Dict[str, object] = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "address": address,
-            "name": fallback_name,
-            "alias": fallback_name,
+            "name": cached.get("name") or fallback_name,
+            "alias": cached.get("alias") or cached.get("name") or fallback_name,
             "uuids": [],
         }
 
+        if cached.get("rssi") is not None:
+            data["rssi"] = cached["rssi"]
+
         for raw_line in text.splitlines():
-            line = raw_line.strip()
+            line = clean_bt_line(raw_line)
             if not line or ":" not in line:
                 continue
 
